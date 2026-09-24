@@ -41,14 +41,20 @@
             this.overlay = new Sprite(this.bitmap);
             scene.addChild(this.overlay);
             this.visuals = new Sprite();
+            this.visuals.sortableChildren = true;
             scene.addChild(this.visuals);
+            this.ground = new PIXI.Graphics();
+            this.ground.z = 0;
+            this.visuals.addChild(this.ground);
             this.spotSprites = [];
             this.towerSprites = [];
             this.enemySprites = [];
             this.projectileSprites = [];
+            this.shadowSprites = [];
             this.baseSprite = this.makeCharacterSprite("!Gate1", 48, 48, 1.6);
             this.baseSprite.x = 742;
             this.baseSprite.y = 185;
+            this.baseSprite.z = this.baseSprite.y;
             this.visuals.addChild(this.baseSprite);
             this.redraw();
         },
@@ -64,18 +70,67 @@
             this.towerSprites.forEach(s => this.visuals.removeChild(s));
             this.enemySprites.forEach(s => this.visuals.removeChild(s));
             this.projectileSprites.forEach(s => this.visuals.removeChild(s));
+            this.shadowSprites.forEach(s => this.visuals.removeChild(s));
             this.spotSprites = [];
             this.towerSprites = [];
             this.enemySprites = [];
             this.projectileSprites = [];
+            this.shadowSprites = [];
+        },
+        depthScale: function(y, base) {
+            return (base || 1) * (0.72 + Math.max(0, Math.min(1, y / 624)) * 0.38);
+        },
+        addShadow: function(x, y, width, height) {
+            const shadow = new PIXI.Graphics();
+            shadow.beginFill(0x0f172a, 0.28);
+            shadow.drawEllipse(x, y, width, height);
+            shadow.endFill();
+            shadow.z = y - 1;
+            this.visuals.addChild(shadow);
+            this.shadowSprites.push(shadow);
+        },
+        drawPerspectiveGround: function() {
+            const g = this.ground;
+            g.clear();
+            g.beginFill(0x1e3a2f, 0.78);
+            g.drawPolygon([24, 126, 786, 126, 812, 522, 4, 522]);
+            g.endFill();
+            g.lineStyle(2, 0x93c5a5, 0.24);
+            for (let i = 0; i <= 8; i++) {
+                const topX = 54 + i * 88;
+                const bottomX = 18 + i * 98;
+                g.moveTo(topX, 140);
+                g.lineTo(bottomX, 510);
+            }
+            for (let i = 0; i <= 5; i++) {
+                const y = 150 + i * 66;
+                const left = 27 + i * 4;
+                const right = 783 - i * 4;
+                g.moveTo(left, y);
+                g.lineTo(right, y);
+            }
+            g.lineStyle(18, 0xc08457, 0.9);
+            g.moveTo(this.path[0].x, this.path[0].y);
+            for (let i = 1; i < this.path.length; i++) {
+                g.lineTo(this.path[i].x, this.path[i].y);
+            }
+            g.lineStyle(6, 0xf6d39a, 0.4);
+            g.moveTo(this.path[0].x, this.path[0].y - 6);
+            for (let i = 1; i < this.path.length; i++) {
+                g.lineTo(this.path[i].x, this.path[i].y - 6);
+            }
         },
         refreshVisuals: function() {
             this.clearVisuals();
+            this.drawPerspectiveGround();
             this.spots.forEach((s, i) => {
                 if (!this.towers.some(t => t.spot === i)) {
                     const marker = this.makeCharacterSprite("!Switch1", 48, 48, 0.65);
                     marker.x = s.x;
                     marker.y = s.y;
+                    marker.scale.set(this.depthScale(s.y, 0.65));
+                    marker.z = marker.y;
+                    this.addShadow(s.x, s.y + 12, 18 * marker.scale.x, 7 * marker.scale.x);
                     this.visuals.addChild(marker);
                     this.spotSprites.push(marker);
                 }
@@ -84,6 +139,9 @@
                 const tower = this.makeCharacterSprite("!Crystal", 48, 48, 1.05);
                 tower.x = t.x;
                 tower.y = t.y - 6;
+                tower.scale.set(this.depthScale(t.y, 1.05));
+                tower.z = tower.y;
+                this.addShadow(t.x, t.y + 11, 22 * tower.scale.x, 8 * tower.scale.x);
                 this.visuals.addChild(tower);
                 this.towerSprites.push(tower);
             });
@@ -92,6 +150,9 @@
                 const p = this.enemyPosition(e);
                 enemy.x = p.x;
                 enemy.y = p.y - 8;
+                enemy.scale.set(this.depthScale(p.y, 0.52));
+                enemy.z = enemy.y;
+                this.addShadow(p.x, p.y + 17, 21 * enemy.scale.x, 8 * enemy.scale.x);
                 this.visuals.addChild(enemy);
                 this.enemySprites.push(enemy);
             });
@@ -100,9 +161,12 @@
                 arrow.x = p.x;
                 arrow.y = p.y;
                 arrow.rotation = p.angle;
+                arrow.scale.set(this.depthScale(p.y, 0.62));
+                arrow.z = arrow.y + 2;
                 this.visuals.addChild(arrow);
                 this.projectileSprites.push(arrow);
             });
+            this.visuals.sortChildren();
         },
         fireArrow: function(tower, target) {
             const start = {x: tower.x, y: tower.y - 14};
@@ -237,14 +301,6 @@
             b.fillRect(0, 520, this.width, 104, "#111827");
             b.paintOpacity = 255;
             b.fillRect(0, 0, 8, this.height, "#f59e0b");
-            b.paintOpacity = 120;
-            for (let i = 0; i < this.path.length - 1; i++) {
-                const a = this.path[i], c = this.path[i + 1];
-                b.lineWidth = 32;
-                b.paintOpacity = 180;
-                b.strokeRect(Math.min(a.x, c.x) - 16, Math.min(a.y, c.y) - 16,
-                    Math.abs(c.x - a.x) + 32, Math.abs(c.y - a.y) + 32, "#78350f");
-            }
             b.paintOpacity = 255;
             this.spots.forEach((s, i) => {
                 b.paintOpacity = 110;
@@ -264,7 +320,7 @@
             });
             b.paintOpacity = 255;
             this.text("THÀNH TRÌ BÌNH MINH", 22, 30, 24, "#fde68a");
-            this.text("Đợt: " + this.wave + "/" + this.waveCount, 360, 28, 20);
+            this.text("2.5D  •  Đợt: " + this.wave + "/" + this.waveCount, 360, 28, 20);
             this.text("Căn cứ: " + this.baseHp + "  |  Vàng: " + this.gold, 570, 28, 18, "#fef3c7");
             this.text("Mỗi tháp 60 vàng • Tầm bắn 150 • Click ô xanh để xây", 22, 58, 16, "#bfdbfe");
             this.text(this.message, 22, 554, 20, this.state === "victory" ? "#86efac" : "#ffffff");
