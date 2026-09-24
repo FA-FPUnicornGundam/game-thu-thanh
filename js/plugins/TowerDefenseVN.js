@@ -29,6 +29,7 @@
             this.spawnLeft = 0;
             this.spawnTimer = 0;
             this.waveDelay = 0;
+            this.projectiles = [];
             this.state = "ready";
             this.message = "Hãy đặt tháp rồi nhấn ENTER để gọi đợt 1.";
         },
@@ -44,6 +45,7 @@
             this.spotSprites = [];
             this.towerSprites = [];
             this.enemySprites = [];
+            this.projectileSprites = [];
             this.baseSprite = this.makeCharacterSprite("!Gate1", 48, 48, 1.6);
             this.baseSprite.x = 742;
             this.baseSprite.y = 185;
@@ -61,9 +63,11 @@
             this.spotSprites.forEach(s => this.visuals.removeChild(s));
             this.towerSprites.forEach(s => this.visuals.removeChild(s));
             this.enemySprites.forEach(s => this.visuals.removeChild(s));
+            this.projectileSprites.forEach(s => this.visuals.removeChild(s));
             this.spotSprites = [];
             this.towerSprites = [];
             this.enemySprites = [];
+            this.projectileSprites = [];
         },
         refreshVisuals: function() {
             this.clearVisuals();
@@ -91,10 +95,40 @@
                 this.visuals.addChild(enemy);
                 this.enemySprites.push(enemy);
             });
+            this.projectiles.forEach(p => {
+                const arrow = this.makeCharacterSprite("!Weapon", 48, 48, 0.62);
+                arrow.x = p.x;
+                arrow.y = p.y;
+                arrow.rotation = p.angle;
+                this.visuals.addChild(arrow);
+                this.projectileSprites.push(arrow);
+            });
+        },
+        fireArrow: function(tower, target) {
+            const start = {x: tower.x, y: tower.y - 14};
+            const end = this.enemyPosition(target);
+            this.projectiles.push({
+                x: start.x,
+                y: start.y,
+                start: start,
+                end: end,
+                progress: 0,
+                angle: Math.atan2(end.y - start.y, end.x - start.x)
+            });
+        },
+        updateProjectiles: function() {
+            for (let i = this.projectiles.length - 1; i >= 0; i--) {
+                const p = this.projectiles[i];
+                p.progress += 0.22;
+                p.x = p.start.x + (p.end.x - p.start.x) * p.progress;
+                p.y = p.start.y + (p.end.y - p.start.y) * p.progress;
+                if (p.progress >= 1) this.projectiles.splice(i, 1);
+            }
         },
         update: function() {
             if (!this.scene) return;
             if (this.state === "playing") this.simulate();
+            this.updateProjectiles();
             if (TouchInput.isTriggered()) this.click(TouchInput.x, TouchInput.y);
             if (Input.isTriggered("ok") && (this.state === "ready" || this.state === "between")) {
                 this.beginWave();
@@ -143,6 +177,7 @@
                 const target = this.enemies.filter(e => e.hp > 0).sort((a, b) =>
                     (b.path * 1000 + b.progress) - (a.path * 1000 + a.progress))[0];
                 if (target && this.distanceToTower(t, target) <= 150) {
+                    this.fireArrow(t, target);
                     target.hp -= 12;
                     t.cooldown = 28;
                     if (target.hp <= 0) this.gold += 20;
